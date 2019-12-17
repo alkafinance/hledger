@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 84e2963cf5ef19727a8719de14430ed621a304efb5a80cf0509872fe46f69992
+-- hash: 53b74b928eb2fd628340ef7095194060678f8e9667c28b91843a865052c82614
 
 name:           hledger
 version:        1.16.1
@@ -150,6 +150,7 @@ library
       Decimal
     , Diff
     , aeson
+    , aeson-pretty
     , ansi-terminal >=0.6.2.3
     , base >=4.9 && <4.14
     , base-compat-batteries >=0.10.1 && <0.12
@@ -202,6 +203,7 @@ executable hledger
   build-depends:
       Decimal
     , aeson
+    , aeson-pretty
     , ansi-terminal >=0.6.2.3
     , base >=4.9 && <4.14
     , base-compat-batteries >=0.10.1 && <0.12
@@ -254,6 +256,7 @@ test-suite unittest
   build-depends:
       Decimal
     , aeson
+    , aeson-pretty
     , ansi-terminal >=0.6.2.3
     , base >=4.9 && <4.14
     , base-compat-batteries >=0.10.1 && <0.12
@@ -303,6 +306,7 @@ benchmark bench
   build-depends:
       Decimal
     , aeson
+    , aeson-pretty
     , ansi-terminal >=0.6.2.3
     , base >=4.9 && <4.14
     , base-compat-batteries >=0.10.1 && <0.12
