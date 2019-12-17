@@ -43,6 +43,7 @@ module Hledger.Data.Transaction (
   transactionNote,
   -- payeeAndNoteFromDescription,
   -- * rendering
+  showStatus,
   showTransaction,
   showTransactionOneLineAmounts,
   showTransactionUnelided,
@@ -183,6 +184,11 @@ showTransactionHelper onelineamounts t =
       (samelinecomment, newlinecomments) =
         case renderCommentLines (tcomment t) of []   -> ("",[])
                                                 c:cs -> (c,cs)
+
+showStatus :: Status -> String
+showStatus Cleared  = "*"
+showStatus Pending  = "!"
+showStatus Unmarked = ""
 
 -- | Render a transaction or posting's comment as indented, semicolon-prefixed comment lines.
 -- The first line (unless empty) will have leading space, subsequent lines will have a larger indent.
