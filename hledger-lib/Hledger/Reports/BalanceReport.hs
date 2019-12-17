@@ -12,7 +12,6 @@ module Hledger.Reports.BalanceReport (
   balanceReport,
   flatShowsExclusiveBalance,
   sortAccountItemsLike,
-  unifyMixedAmount,
   perdivide,
 
   -- * Tests
@@ -195,32 +194,23 @@ brNegate (is, tot) = (map brItemNegate is, -tot)
   where
     brItemNegate (a, a', d, amt) = (a, a', d, -amt)
 
--- | Helper to unify a MixedAmount to a single commodity value.
--- Like normaliseMixedAmount, this consolidates amounts of the same commodity
--- and discards zero amounts; but this one insists on simplifying to
--- a single commodity, and will throw a program-terminating error if
--- this is not possible.
-unifyMixedAmount :: MixedAmount -> Amount
-unifyMixedAmount mixedAmount = foldl combine (num 0) (amounts mixedAmount)
-  where
-    combine amount result =
-      if isReallyZeroAmount amount
-      then result
-      else if isReallyZeroAmount result
-        then amount
-        else if acommodity amount == acommodity result
-          then amount + result
-          else error' "Cannot calculate percentages for accounts with multiple commodities. (Hint: Try --cost, -V or similar flags.)"
-
 -- | Helper to calculate the percentage from two mixed. Keeps the sign of the first argument.
--- Uses unifyMixedAmount to unify each argument and then divides them.
+-- Uses unifyMixedAmount to convert each argument to a simple Amount and then divides them.
+-- If they can't be simplified to simple Amounts, a program-terminating error is thrown.
 perdivide :: MixedAmount -> MixedAmount -> MixedAmount
 perdivide a b =
-  let a' = unifyMixedAmount a
-      b' = unifyMixedAmount b
-  in if isReallyZeroAmount a' || isReallyZeroAmount b' || acommodity a' == acommodity b'
-    then mixed [per $ if aquantity b' == 0 then 0 else (aquantity a' / abs (aquantity b') * 100)]
-    else error' "Cannot calculate percentages if accounts have different commodities. (Hint: Try --cost, -V or similar flags.)"
+  let ma = unifyMixedAmount a
+      mb = unifyMixedAmount b
+  in
+    case (ma, mb) of
+      (a', b') -> 
+      -- TODO see Amount.hs
+      -- (Just a', Just b') -> 
+        if isReallyZeroAmount a' || isReallyZeroAmount b' || acommodity a' == acommodity b'
+        then mixed [per $ if aquantity b' == 0 then 0 else (aquantity a' / abs (aquantity b') * 100)]
+        else error' "Cannot calculate percentages if accounts have different commodities. (Hint: Try --cost, -V or similar flags.)"
+      -- otherwise ->
+      --   error' "Cannot calculate percentages if accounts have different commodities. (Hint: Try --cost, -V or similar flags.)"
 
 -- tests
 

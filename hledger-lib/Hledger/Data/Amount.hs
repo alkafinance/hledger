@@ -40,7 +40,10 @@ exchange rates.
 
 -}
 
-{-# LANGUAGE StandaloneDeriving, RecordWildCards, OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Hledger.Data.Amount (
   -- * Amount
@@ -97,6 +100,7 @@ module Hledger.Data.Amount (
   -- ** arithmetic
   costOfMixedAmount,
   mixedAmountToCost,
+  unifyMixedAmount,
   divideMixedAmount,
   multiplyMixedAmount,
   divideMixedAmountAndPrice,
@@ -128,6 +132,8 @@ module Hledger.Data.Amount (
   tests_Amount
 ) where
 
+-- import Control.Exception (SomeException, catch)
+-- import Control.Monad.Except
 import Data.Char (isDigit)
 import Data.Decimal (roundTo, decimalPlaces, normalizeDecimal)
 import Data.Function (on)
@@ -579,6 +585,41 @@ costOfMixedAmount (Mixed as) = Mixed $ map costOfAmount as
 -- | Convert all component amounts to cost, and apply the appropriate amount styles.
 mixedAmountToCost :: M.Map CommoditySymbol AmountStyle -> MixedAmount -> MixedAmount
 mixedAmountToCost styles (Mixed as) = Mixed $ map (amountToCost styles) as
+
+-- | Convert a MixedAmount to a simple single-commodity Amount.
+-- Like costOfMixedAmount, but this one insists on simplifying to
+-- a single commodity, or throws a program-terminating error if this is not possible.
+unifyMixedAmount :: MixedAmount -> Amount
+-- unifyMixedAmount :: MixedAmount -> Maybe Amount -- TODO
+unifyMixedAmount m =
+  foldl combine (num 0) (amounts m)
+  where
+    combine amount result =
+      if isReallyZeroAmount amount
+      then result
+      else if isReallyZeroAmount result
+        then amount
+        else if acommodity amount == acommodity result
+          then amount + result
+          else error "unifyMixedAmount: can't simplify"
+
+-- Just $ foldl combine (num 0) (amounts m)
+--   `catch` \(_::SomeException) -> Nothing
+
+--   rightToMaybe $ runExcept $ foldl combine (num 0) (amounts m)
+-- combine' amount result =
+--   if isReallyZeroAmount amount
+--   then return result
+--   else if isReallyZeroAmount result
+--     then return amount
+--     else if acommodity amount == acommodity result
+--       then return $ amount + result
+--       else throwError "unifyMixedAmount: can't simplify"
+
+-- import Data.Either.Combinators (rightToMaybe)
+-- rightToMaybe :: Either a b -> Maybe b
+-- rightToMaybe (Right x) = Just x
+-- rightToMaybe (Left _)  = Nothing
 
 -- | Divide a mixed amount's quantities by a constant.
 divideMixedAmount :: Quantity -> MixedAmount -> MixedAmount
