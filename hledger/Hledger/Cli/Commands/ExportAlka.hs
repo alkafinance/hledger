@@ -19,14 +19,20 @@ module Hledger.Cli.Commands.ExportAlka (
 ) where
 
 import Data.Aeson -- (toJSON)
-import Data.Aeson.Text (encodeToLazyText)
-import qualified Data.Text.Lazy as T (toStrict)
+-- import Data.Aeson.Text (encodeToLazyText)
+import Data.Aeson.Encode.Pretty (encodePretty)
+import qualified Data.ByteString.Lazy as B (toStrict)
+import qualified Data.Map as M -- (toList)
+import qualified Data.Text as T (unpack)
+import qualified Data.Text.Encoding as T (decodeUtf8)
+-- import qualified Data.Text.Lazy as T (toStrict)
 import qualified Data.Text.IO as T (putStrLn)
 -- import qualified Data.ByteString.Lazy as BL
 import           Data.Decimal
 -- import           Data.Maybe
 import           GHC.Generics (Generic)
-import           System.Time (ClockTime)
+import           System.FilePath (takeFileName)
+import           System.Time (ClockTime) --,Day)
 
 import Hledger  -- not including Hledger.Data.Json, instead use alka-specific JSON below
 import Hledger.Cli.CliOptions
@@ -41,13 +47,41 @@ exportalkamode = hledgerCommandMode
 
 -- | The exportalka command. Exports a full Ledger (Journal plus tree
 -- of summed Accounts) as hledger JSON. TODO: convert to alka JSON.
+-- Assumes the internal data is UTF-8 encoded, will give an error otherwise.
 exportalka :: CliOpts -> Journal -> IO ()
 exportalka _cliopts j = do
-  let l = ledgerFromJournal Any j
-  T.putStrLn $ T.toStrict $ encodeToLazyText $ toJSON l
-
+  T.putStrLn $
+    -- T.toStrict $ encodeToLazyText $  -- compact JSON
+    T.decodeUtf8 $ B.toStrict $ encodePretty $  -- human-readable JSON
+    object
+      ["version"     .= ("1"::String)
+      ,"ledgers"     .= [
+          object [
+             "title"        .= (takeFileName $ fst $ head $ jfiles j)
+            ,"accounts"     .= (map accountNametoAlkaAccount $ journalAccountNames j)
+            ,"transactions" .= jtxns j
+            ]]
+      ,"commodities" .= (M.elems $ jcommodities j)
+      ,"prices"      .= jpricedirectives j
+      ]
 
 -- Alka-specific ToJSON instances.
+
+-- TODO
+-- should null values appear in JSON as null or undefined ?
+
+accountNametoAlkaAccount :: AccountName -> Value
+accountNametoAlkaAccount a = toJSON $ object
+  ["closeDate" .= (Nothing::Maybe Bool)
+  ,"openDate"  .= (Nothing::Maybe Bool)
+  ,"path"      .= accountNameToAlkaAccountPath a
+  ,"alias"     .= (""::String)
+  ]
+
+type AlkaAccountPath = String
+
+accountNameToAlkaAccountPath :: AccountName -> AlkaAccountPath
+accountNameToAlkaAccountPath = map (\c -> if c==':' then '/' else c) . T.unpack
 
 instance ToJSON Status
 instance ToJSON GenericSourcePos
@@ -55,14 +89,23 @@ instance ToJSON Decimal
 
 instance ToJSON Commodity where
   toJSON Commodity{..} = object
-    ["name" .= toJSON csymbol
-    ,"unit" .= toJSON csymbol
+    ["name" .= csymbol
+    ,"unit" .= csymbol
     ]
+
+-- This would duplicate Decimal's own ToJSON instance imported above.
+-- instance ToJSON Quantity where
+--   toJSON decimal = toJSON (realToFrac decimal :: Double)
+
+-- Use a helper instead. Problem: how to ensure 0.005 isn't rendered as 5.0e-3 ?
+decimalToFloatingPoint :: Decimal -> Double
+decimalToFloatingPoint = realToFrac
+-- decimalToFloatingPoint = printf "%f" realToFrac
 
 instance ToJSON Amount where
   toJSON Amount{..} = object
-    ["quantity" .= toJSON (realToFrac aquantity :: Double)
-    ,"unit" .= toJSON acommodity
+    ["quantity" .= decimalToFloatingPoint aquantity
+    ,"unit" .= acommodity
     ]
 
 instance ToJSON AmountStyle
@@ -76,26 +119,39 @@ instance ToJSON PostingType
 
 instance ToJSON Posting where
   toJSON Posting{..} = object
-    ["pdate"             .= toJSON pdate
-    ,"pdate2"            .= toJSON pdate2
-    ,"pstatus"           .= toJSON pstatus
-    ,"paccount"          .= toJSON paccount
-    ,"pamount"           .= toJSON pamount
-    ,"pcomment"          .= toJSON pcomment
-    ,"ptype"             .= toJSON ptype
-    ,"ptags"             .= toJSON ptags
-    ,"pbalanceassertion" .= toJSON pbalanceassertion
-    -- To avoid a cycle, show just the parent transaction's index number
-    -- in a dummy field. When re-parsed, there will be no parent.
-    ,"ptransaction_"     .= toJSON (maybe "" (show.tindex) ptransaction)
-    -- This is probably not wanted in json, we discard it.
-    ,"poriginal"         .= toJSON (Nothing :: Maybe Posting)
+    ["accountPath"       .= accountNameToAlkaAccountPath paccount
+    ,"amount"            .= unifyMixedAmount pamount       -- can throw an error
+    ,"cost"              .= (Nothing::Maybe Amount) -- XXX
+    ,"flag"              .= showStatus pstatus
+    -- ,"pcomment"          .= toJSON pcomment
+    -- ,"ptype"             .= toJSON ptype
+    -- ,"ptags"             .= toJSON ptags
+    -- ,"pbalanceassertion" .= toJSON pbalanceassertion
     ]
 
-instance ToJSON Transaction
+instance ToJSON Transaction where
+  toJSON t@Transaction{..} = object
+    ["date"  .= tdate
+    ,"flag"  .= showStatus tstatus
+    ,"links" .= ([]::[String])
+    ,"tagNames" .= map fst ttags
+    ,"payee" .= transactionPayee t
+    ,"notes" .= transactionNote t
+    ,"postings" .= tpostings
+    ]                                    
+
+
 instance ToJSON TransactionModifier
 instance ToJSON PeriodicTransaction
-instance ToJSON PriceDirective
+
+instance ToJSON PriceDirective where
+  toJSON PriceDirective{..} = object
+    ["baseUnit"   .= pdcommodity
+    ,"targetUnit" .= acommodity pdamount
+    ,"rate"       .= (decimalToFloatingPoint $ aquantity pdamount)
+    ,"date"       .= pddate
+    ]                                    
+  
 instance ToJSON DateSpan
 instance ToJSON Interval
 instance ToJSON AccountAlias
@@ -109,20 +165,20 @@ instance ToJSON Journal
 
 instance ToJSON Account where
   toJSON a = object
-    ["aname"        .= toJSON (aname a)
-    ,"aebalance"    .= toJSON (aebalance a)
-    ,"aibalance"    .= toJSON (aibalance a)
-    ,"anumpostings" .= toJSON (anumpostings a)
-    ,"aboring"      .= toJSON (aboring a)
+    ["aname"        .= aname a
+    ,"aebalance"    .= aebalance a
+    ,"aibalance"    .= aibalance a
+    ,"anumpostings" .= anumpostings a
+    ,"aboring"      .= aboring a
     -- To avoid a cycle, show just the parent account's name
     -- in a dummy field. When re-parsed, there will be no parent.
-    ,"aparent_"     .= toJSON (maybe "" aname $ aparent a)
+    ,"aparent_"     .= (maybe "" aname $ aparent a)
     -- Just the names of subaccounts, as a dummy field, ignored when parsed.
-    ,"asubs_"       .= toJSON (map aname $ asubs a)
+    ,"asubs_"       .= (map aname $ asubs a)
     -- The actual subaccounts (and their subs..), making a (probably highly redundant) tree
     -- ,"asubs"        .= toJSON (asubs a)
     -- Omit the actual subaccounts
-    ,"asubs"        .= toJSON ([]::[Account])
+    ,"asubs"        .= ([]::[Account])
     ]
 
 deriving instance Generic (Ledger)
@@ -201,3 +257,4 @@ instance FromJSON (DecimalRaw Integer)
 -- -- >>> writeJsonFile "out.json" nullmixedamt
 -- writeJsonFile :: ToJSON a => FilePath -> a -> IO ()
 -- writeJsonFile f v = BL.writeFile f (encode $ toJSON v)
+
