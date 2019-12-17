@@ -171,6 +171,7 @@ library:
   - Hledger.Cli.Commands.Commodities
   - Hledger.Cli.Commands.Descriptions
   - Hledger.Cli.Commands.Diff
+  - Hledger.Cli.Commands.ExportAlka
   - Hledger.Cli.Commands.Help
   - Hledger.Cli.Commands.Files
   - Hledger.Cli.Commands.Import

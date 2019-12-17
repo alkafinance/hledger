@@ -30,6 +30,7 @@ module Hledger.Cli.Commands (
   ,module Hledger.Cli.Commands.Commodities
   ,module Hledger.Cli.Commands.Descriptions
   ,module Hledger.Cli.Commands.Diff
+  ,module Hledger.Cli.Commands.ExportAlka
   ,module Hledger.Cli.Commands.Help
   ,module Hledger.Cli.Commands.Import
   ,module Hledger.Cli.Commands.Incomestatement
@@ -75,6 +76,7 @@ import Hledger.Cli.Commands.Close
 import Hledger.Cli.Commands.Commodities
 import Hledger.Cli.Commands.Descriptions
 import Hledger.Cli.Commands.Diff
+import Hledger.Cli.Commands.ExportAlka
 import Hledger.Cli.Commands.Files
 import Hledger.Cli.Commands.Help
 import Hledger.Cli.Commands.Import
@@ -110,6 +112,7 @@ builtinCommands = [
   ,(commoditiesmode        , commodities)
   ,(descriptionsmode        , descriptions)
   ,(diffmode               , diff)
+  ,(exportalkamode         , exportalka)
   ,(filesmode              , files)
   ,(helpmode               , help')
   ,(importmode             , importcmd)
@@ -165,6 +168,7 @@ commandsList = unlines [
   ," check-dupes              check for accounts with the same leaf name"
   ," close (equity)           generate balance-resetting transactions"
   ," diff                     compare account transactions in two journal files"
+  ," export-alka              export all data as JSON compatible with https://alka.app"
   ,"+interest                 generate interest transactions"
   ," rewrite                  generate automated postings/diffs (old, use --auto)"
   ,""
